@@ -2,31 +2,23 @@ package gormery
 
 import "fmt"
 
-type Relation int
-
-const (
-	andRelation Relation = iota + 1
-	orRelation
-)
-
 type ConditionElement struct {
 	Operator string
 	Field    string
 	Value    interface{}
 }
 
-func CombineSimpleQuery(elements []ConditionElement, relation Relation) (string, []interface{}) {
+func CombineSimpleQuery(elements []ConditionElement, relation string) (string, []interface{}) {
 	if len(elements) == 0 {
 		return "", nil
 	}
 	sql := ""
 	values := make([]interface{}, len(elements))
-	conjunction := stringifyConjunction(relation)
 	for index, query := range elements {
 		if sql == "" {
 			sql += fmt.Sprintf("%s %s ?", query.Field, query.Operator)
 		} else {
-			sql += fmt.Sprintf(" %s %s %s ?", conjunction, query.Field, query.Operator)
+			sql += fmt.Sprintf(" %s %s %s ?", relation, query.Field, query.Operator)
 		}
 		values[index] = query.Value
 	}
@@ -71,14 +63,4 @@ func NewConditionElement(operator, field string, value interface{}) ConditionEle
 		Field:    field,
 		Value:    value,
 	}
-}
-
-func stringifyConjunction(relation Relation) string {
-	switch relation {
-	case andRelation:
-		return "AND"
-	case orRelation:
-		return "OR"
-	}
-	return "CONJUNCTION_ERROR"
 }
