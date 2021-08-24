@@ -5,27 +5,14 @@ import "fmt"
 type Relation int
 
 const (
-	And Relation = iota + 1
-	Or
-)
-
-type Operator int
-
-const (
-	Eq Operator = iota + 1
-	NotEq
-	Like
-	NotLike
-	More
-	Less
-	MoreOrEq
-	LessOrEq
+	andRelation Relation = iota + 1
+	orRelation
 )
 
 type ConditionElement struct {
-	Oper  Operator
-	Field string
-	Value interface{}
+	Operator string
+	Field    string
+	Value    interface{}
 }
 
 func CombineSimpleQuery(elements []ConditionElement, relation Relation) (string, []interface{}) {
@@ -34,51 +21,63 @@ func CombineSimpleQuery(elements []ConditionElement, relation Relation) (string,
 	}
 	sql := ""
 	values := make([]interface{}, len(elements))
-	conjunction := ""
-	switch relation {
-	case And:
-		conjunction = "AND"
-	case Or:
-		conjunction = "OR"
-	}
+	conjunction := stringifyConjunction(relation)
 	for index, query := range elements {
 		if sql == "" {
-			sql += fmt.Sprintf("%s %s ?", query.Field, stringifyOperator(query.Oper))
+			sql += fmt.Sprintf("%s %s ?", query.Field, query.Operator)
 		} else {
-			sql += fmt.Sprintf(" %s %s %s ?", conjunction, query.Field, stringifyOperator(query.Oper))
+			sql += fmt.Sprintf(" %s %s %s ?", conjunction, query.Field, query.Operator)
 		}
 		values[index] = query.Value
 	}
 	return sql, values
 }
 
-func stringifyOperator(operator Operator) string {
-	switch operator {
-	case Eq:
-		return "="
-	case NotEq:
-		return "<>"
-	case Like:
-		return "LIKE"
-	case NotLike:
-		return "NOT LIKE"
-	case More:
-		return ">"
-	case Less:
-		return "<"
-	case MoreOrEq:
-		return ">="
-	case LessOrEq:
-		return "<="
+func Equal(field string, value interface{}) ConditionElement {
+	return NewConditionElement("=", field, value)
+}
+
+func NotEqual(field string, value interface{}) ConditionElement {
+	return NewConditionElement("<>", field, value)
+}
+
+func Like(field string, value interface{}) ConditionElement {
+	return NewConditionElement("LIKE", field, value)
+}
+
+func NotLike(field string, value interface{}) ConditionElement {
+	return NewConditionElement("NOT LIKE", field, value)
+}
+
+func More(field string, value interface{}) ConditionElement {
+	return NewConditionElement(">", field, value)
+}
+
+func MoreOrEqual(field string, value interface{}) ConditionElement {
+	return NewConditionElement(">=", field, value)
+}
+
+func Less(field string, value interface{}) ConditionElement {
+	return NewConditionElement("<", field, value)
+}
+
+func LessOrEqual(field string, value interface{}) ConditionElement {
+	return NewConditionElement("<=", field, value)
+}
+
+func NewConditionElement(operator, field string, value interface{}) ConditionElement {
+	return ConditionElement{
+		Operator: operator,
+		Field:    field,
+		Value:    value,
 	}
-	return "OPERATOR_ERROR"
 }
 
 func stringifyConjunction(relation Relation) string {
 	switch relation {
-	case And:
+	case andRelation:
 		return "AND"
-	case Or:
+	case orRelation:
 		return "OR"
 	}
 	return "CONJUNCTION_ERROR"
