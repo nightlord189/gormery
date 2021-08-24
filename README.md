@@ -5,7 +5,7 @@ small library for simplify building complex SQL queries in [gorm.io](https://gor
 
 ### Install
 ```
-go get github.com/nightlord189/gorm-query
+go get github.com/nightlord189/gormery
 ```
 
 ### Use
