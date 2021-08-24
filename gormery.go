@@ -22,13 +22,13 @@ const (
 	LessOrEq
 )
 
-type QueryElement struct {
+type ConditionElement struct {
 	Oper  Operator
 	Field string
 	Value interface{}
 }
 
-func CombineSimpleQuery(elements []QueryElement, relation Relation) (string, []interface{}) {
+func CombineSimpleQuery(elements []ConditionElement, relation Relation) (string, []interface{}) {
 	if len(elements) == 0 {
 		return "", nil
 	}
