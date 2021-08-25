@@ -20,9 +20,9 @@ queryElems = append(queryElems, gormery.NotEqual("parent_id", "1834"))
 queryElems = append(queryElems, gormery.Like("name", "%orange%"))
 queryElems = append(queryElems, gormery.MoreOrEqual("amount", 201500))
 
-sql, elems := gormery.CombineSimpleQuery(queryElems, "AND")
+sql, arguments := gormery.CombineSimpleQuery(queryElems, "AND")
 
-d.DB.Where(sql, elems...).Find(&result).Error
+d.DB.Where(sql, arguments...).Find(&result).Error
 ```
 
 this query will be translated to:
