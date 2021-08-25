@@ -10,7 +10,14 @@ go get github.com/nightlord189/gormery
 
 ### Use
 ```Go
-import "github.com/nightlord189/gormery"
+import (
+  "gorm.io/driver/postgres"
+  "gorm.io/gorm"
+  "github.com/nightlord189/gormery"
+) 
+
+dsn := "host=localhost user=gorm password=gorm dbname=gorm port=9920 sslmode=disable TimeZone=Asia/Shanghai"
+db, _ := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 result := make([]model.Entity, 0)
 
@@ -22,7 +29,7 @@ queryElems = append(queryElems, gormery.MoreOrEqual("amount", 201500))
 
 sql, arguments := gormery.CombineSimpleQuery(queryElems, "AND")
 
-d.DB.Where(sql, arguments...).Find(&result).Error
+db.Where(sql, arguments...).Find(&result).Error
 ```
 
 this query will be translated to:
