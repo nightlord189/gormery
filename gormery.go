@@ -5,19 +5,97 @@ package gormery
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
-// ConditionElement представляет элемент условия SQL запроса
-type ConditionElement struct {
+// ConditionElement представляет интерфейс для элементов условия SQL запроса
+type ConditionElement interface {
+	ToSQL() (string, []interface{})
+}
+
+// SimpleCondition представляет простое условие SQL запроса
+type SimpleCondition struct {
 	Field    string      // Имя поля или полная часть SQL выражения
 	Operator string      // Оператор сравнения (=, >, <, LIKE и т.д.)
 	Value    interface{} // Значение для сравнения
 }
 
+// ToSQL конвертирует простое условие в строку SQL и параметры
+func (c SimpleCondition) ToSQL() (string, []interface{}) {
+	switch c.Operator {
+	case "IS NULL", "IS NOT NULL":
+		// Для операторов, которые не требуют значения
+		return fmt.Sprintf("%s %s", c.Field, c.Operator), nil
+	case "IN":
+		// Для оператора IN, который требует особого форматирования
+		switch values := c.Value.(type) {
+		case []string:
+			placeholders := make([]string, len(values))
+			params := make([]interface{}, len(values))
+			for i, v := range values {
+				placeholders[i] = "?"
+				params[i] = v
+			}
+			return fmt.Sprintf("%s %s (%s)", c.Field, c.Operator, strings.Join(placeholders, ", ")), params
+		case []int:
+			placeholders := make([]string, len(values))
+			params := make([]interface{}, len(values))
+			for i, v := range values {
+				placeholders[i] = "?"
+				params[i] = v
+			}
+			return fmt.Sprintf("%s %s (%s)", c.Field, c.Operator, strings.Join(placeholders, ", ")), params
+		default:
+			// Для других типов, если требуется поддержка
+			return fmt.Sprintf("%s %s (?)", c.Field, c.Operator), []interface{}{c.Value}
+		}
+	case "BETWEEN":
+		// Для оператора BETWEEN, который требует двух значений
+		values, ok := c.Value.([]interface{})
+		if ok && len(values) == 2 {
+			return fmt.Sprintf("%s %s ? AND ?", c.Field, c.Operator), values
+		}
+		return "", nil
+	default:
+		// Для стандартных операторов (=, >, <, !=, LIKE, ...)
+		return fmt.Sprintf("%s %s ?", c.Field, c.Operator), []interface{}{c.Value}
+	}
+}
+
+// ComplexCondition представляет сложное условие с вложенными элементами
+type ComplexCondition struct {
+	LogicalOperator string             // Логический оператор (AND, OR)
+	Conditions      []ConditionElement // Список условий
+}
+
+// ToSQL конвертирует сложное условие в строку SQL и параметры
+func (c ComplexCondition) ToSQL() (string, []interface{}) {
+	if len(c.Conditions) == 0 {
+		return "", nil
+	}
+
+	var queryParts []string
+	var params []interface{}
+
+	for _, cond := range c.Conditions {
+		sql, elems := cond.ToSQL()
+		if sql != "" {
+			queryParts = append(queryParts, sql)
+			if elems != nil {
+				params = append(params, elems...)
+			}
+		}
+	}
+
+	if len(queryParts) == 0 {
+		return "", nil
+	}
+
+	return fmt.Sprintf("(%s)", strings.Join(queryParts, fmt.Sprintf(" %s ", c.LogicalOperator))), params
+}
+
 // Equal создает условие равенства field = value
 func Equal(field string, value interface{}) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: "=",
 		Value:    value,
@@ -26,7 +104,7 @@ func Equal(field string, value interface{}) ConditionElement {
 
 // NotEqual создает условие неравенства field != value
 func NotEqual(field string, value interface{}) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: "!=",
 		Value:    value,
@@ -35,7 +113,7 @@ func NotEqual(field string, value interface{}) ConditionElement {
 
 // More создает условие field > value
 func More(field string, value interface{}) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: ">",
 		Value:    value,
@@ -44,7 +122,7 @@ func More(field string, value interface{}) ConditionElement {
 
 // Less создает условие field < value
 func Less(field string, value interface{}) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: "<",
 		Value:    value,
@@ -53,7 +131,7 @@ func Less(field string, value interface{}) ConditionElement {
 
 // MoreOrEqual создает условие field >= value
 func MoreOrEqual(field string, value interface{}) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: ">=",
 		Value:    value,
@@ -62,7 +140,7 @@ func MoreOrEqual(field string, value interface{}) ConditionElement {
 
 // LessOrEqual создает условие field <= value
 func LessOrEqual(field string, value interface{}) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: "<=",
 		Value:    value,
@@ -71,7 +149,7 @@ func LessOrEqual(field string, value interface{}) ConditionElement {
 
 // Like создает условие field LIKE value
 func Like(field string, value string) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: "LIKE",
 		Value:    value,
@@ -80,7 +158,7 @@ func Like(field string, value string) ConditionElement {
 
 // In создает условие field IN (values)
 func In(field string, values interface{}) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: "IN",
 		Value:    values,
@@ -89,7 +167,7 @@ func In(field string, values interface{}) ConditionElement {
 
 // IsNull создает условие field IS NULL
 func IsNull(field string) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: "IS NULL",
 		Value:    nil,
@@ -98,7 +176,7 @@ func IsNull(field string) ConditionElement {
 
 // IsNotNull создает условие field IS NOT NULL
 func IsNotNull(field string) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: "IS NOT NULL",
 		Value:    nil,
@@ -107,10 +185,18 @@ func IsNotNull(field string) ConditionElement {
 
 // Between создает условие field BETWEEN value1 AND value2
 func Between(field string, value1, value2 interface{}) ConditionElement {
-	return ConditionElement{
+	return SimpleCondition{
 		Field:    field,
 		Operator: "BETWEEN",
 		Value:    []interface{}{value1, value2},
+	}
+}
+
+// Complex создает сложное условие с несколькими ConditionElement, объединенными через логический оператор
+func Complex(logicalOperator string, conditions ...ConditionElement) ConditionElement {
+	return ComplexCondition{
+		LogicalOperator: logicalOperator,
+		Conditions:      conditions,
 	}
 }
 
@@ -125,99 +211,18 @@ func CombineSimpleQuery(conditions []ConditionElement, logicalOperator string) (
 	var params []interface{}
 
 	for _, cond := range conditions {
-		switch cond.Operator {
-		case "IS NULL", "IS NOT NULL":
-			// Для операторов, которые не требуют значения
-			queryParts = append(queryParts, fmt.Sprintf("%s %s", cond.Field, cond.Operator))
-		case "IN":
-			// Для оператора IN, который требует особого форматирования
-			switch values := cond.Value.(type) {
-			case []string:
-				placeholders := make([]string, len(values))
-				for i, v := range values {
-					placeholders[i] = "?"
-					params = append(params, v)
-				}
-				queryParts = append(queryParts, fmt.Sprintf("%s %s (%s)", cond.Field, cond.Operator, strings.Join(placeholders, ", ")))
-			case []int:
-				placeholders := make([]string, len(values))
-				for i, v := range values {
-					placeholders[i] = "?"
-					params = append(params, v)
-				}
-				queryParts = append(queryParts, fmt.Sprintf("%s %s (%s)", cond.Field, cond.Operator, strings.Join(placeholders, ", ")))
-			default:
-				// Для других типов, если требуется поддержка
-				queryParts = append(queryParts, fmt.Sprintf("%s %s (?)", cond.Field, cond.Operator))
-				params = append(params, cond.Value)
+		sql, elems := cond.ToSQL()
+		if sql != "" {
+			queryParts = append(queryParts, sql)
+			if elems != nil {
+				params = append(params, elems...)
 			}
-		case "BETWEEN":
-			// Для оператора BETWEEN, который требует двух значений
-			values, ok := cond.Value.([]interface{})
-			if ok && len(values) == 2 {
-				queryParts = append(queryParts, fmt.Sprintf("%s %s ? AND ?", cond.Field, cond.Operator))
-				params = append(params, values[0], values[1])
-			}
-		default:
-			// Для стандартных операторов (=, >, <, !=, LIKE, ...)
-			queryParts = append(queryParts, fmt.Sprintf("%s %s ?", cond.Field, cond.Operator))
-			params = append(params, cond.Value)
 		}
+	}
+
+	if len(queryParts) == 0 {
+		return "", nil
 	}
 
 	return strings.Join(queryParts, fmt.Sprintf(" %s ", logicalOperator)), params
-}
-
-// FormatTimeValue форматирует time.Time для базы данных
-func FormatTimeValue(t time.Time) string {
-	return t.Format("2006-01-02 15:04:05")
-}
-
-// BuildOrderBy создает часть ORDER BY запроса
-func BuildOrderBy(fields []string, directions []string) string {
-	if len(fields) == 0 {
-		return ""
-	}
-
-	orderClauses := make([]string, len(fields))
-	for i, field := range fields {
-		direction := "ASC" // По умолчанию сортировка по возрастанию
-		if i < len(directions) && (directions[i] == "DESC" || directions[i] == "desc") {
-			direction = "DESC"
-		}
-		orderClauses[i] = fmt.Sprintf("%s %s", field, direction)
-	}
-
-	return fmt.Sprintf("ORDER BY %s", strings.Join(orderClauses, ", "))
-}
-
-// BuildLimit создает часть LIMIT запроса
-func BuildLimit(limit int) string {
-	if limit <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("LIMIT %d", limit)
-}
-
-// BuildOffset создает часть OFFSET запроса
-func BuildOffset(offset int) string {
-	if offset <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("OFFSET %d", offset)
-}
-
-// BuildPagination создает части LIMIT и OFFSET для пагинации
-func BuildPagination(page, pageSize int) (string, string) {
-	if page <= 0 {
-		page = 1
-	}
-	if pageSize <= 0 {
-		pageSize = 10
-	}
-
-	limit := BuildLimit(pageSize)
-	offset := BuildOffset((page - 1) * pageSize)
-
-	return limit, offset
 }
